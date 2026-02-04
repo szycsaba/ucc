@@ -133,7 +133,9 @@ services:
       - ucc
 
   frontend:
-    image: node:latest
+    build:
+      context: ./docker/frontend
+      dockerfile: Dockerfile
     container_name: ucc-frontend
     restart: unless-stopped
     working_dir: /app
@@ -146,19 +148,6 @@ services:
       - "5173:5173"
     networks:
       - ucc
-    command: >
-      sh -c '
-        set -eu;
-        if [ ! -f /app/package.json ]; then
-          echo "[frontend] ./frontend looks empty -> creating Vite + React project...";
-          npm create vite@latest . -- --template react;
-        fi;
-        if [ ! -d /app/node_modules ] || [ -z "$(ls -A /app/node_modules 2>/dev/null || true)" ]; then
-          echo "[frontend] Installing frontend dependencies (npm install)...";
-          npm install;
-        fi;
-        exec npm run dev -- --host 0.0.0.0 --port 5173;
-      '
 
 volumes:
   mysql_data:
