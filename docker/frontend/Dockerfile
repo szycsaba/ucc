@@ -9,7 +9,8 @@ RUN apt-get update -o Acquire::Retries=3 \
 WORKDIR /app
 
 COPY entrypoint.sh /usr/local/bin/ucc-frontend-entrypoint.sh
-RUN chmod +x /usr/local/bin/ucc-frontend-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/ucc-frontend-entrypoint.sh \
+  && chmod +x /usr/local/bin/ucc-frontend-entrypoint.sh
 
 EXPOSE 5173
 
