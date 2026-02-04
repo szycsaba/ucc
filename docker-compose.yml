@@ -47,52 +47,11 @@ services:
         condition: service_healthy
     networks:
       - ucc
-    command: >
-      sh -c '
-        set -eu;
-        if [ ! -f /ssl/server.key ] || [ ! -f /ssl/server.crt ]; then
-          echo "[php] Generating self-signed TLS cert for Apache (dev only)...";
-          mkdir -p /ssl;
-          openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
-            -subj "/CN=localhost" \
-            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
-            -keyout /ssl/server.key -out /ssl/server.crt;
-        fi;
-
-        if [ ! -f /var/www/html/artisan ]; then
-          echo "[php] ./api looks empty -> creating Laravel 12 project...";
-          rm -rf /tmp/laravel-init;
-          mkdir -p /tmp/laravel-init;
-          composer create-project --no-interaction laravel/laravel:^12.0 /tmp/laravel-init;
-          cp -a /tmp/laravel-init/. /var/www/html/;
-        fi;
-
-        if [ -f /var/www/html/composer.json ]; then
-          if [ ! -d /var/www/html/vendor ] || [ -z "$(ls -A /var/www/html/vendor 2>/dev/null || true)" ]; then
-            echo "[php] Installing backend dependencies (composer install)...";
-            composer install --no-interaction --prefer-dist;
-          fi;
-
-          # Fix common bind-mount permissions for Laravel runtime dirs
-          mkdir -p /var/www/html/storage/framework/{cache,sessions,views} /var/www/html/bootstrap/cache;
-          chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true;
-          chmod -R ug+rwX /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true;
-          # On some Docker Desktop / Windows bind mounts, chown/chmod may not apply; fallback for dev.
-          chmod -R 777 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true;
-
-          if [ -f /var/www/html/.env ] && grep -q "^APP_KEY=$" /var/www/html/.env; then
-            echo "[php] Generating Laravel APP_KEY (php artisan key:generate)...";
-            php /var/www/html/artisan key:generate --no-interaction;
-          fi;
-        else
-          echo "[php] WARNING: ./api/composer.json not found. Create your Laravel project in ./api first.";
-        fi;
-
-        exec php-fpm -F;
-      '
 
   apache:
-    image: httpd:2.4
+    build:
+      context: ./docker/apache
+      dockerfile: Dockerfile
     container_name: ucc-apache
     restart: unless-stopped
     ports:
@@ -105,21 +64,6 @@ services:
       - apache_ssl:/usr/local/apache2/conf/ssl
     networks:
       - ucc
-    command: >
-      sh -c '
-        set -eu;
-        mkdir -p /usr/local/apache2/conf/ssl;
-        echo "[apache] Waiting for TLS cert files...";
-        while [ ! -f /usr/local/apache2/conf/ssl/server.key ] || [ ! -f /usr/local/apache2/conf/ssl/server.crt ]; do
-          sleep 1;
-        done;
-        echo "[apache] Waiting for Laravel public/index.php...";
-        while [ ! -f /var/www/html/public/index.php ]; do
-          sleep 1;
-        done;
-        export PATH="/usr/local/apache2/bin:${PATH}";
-        exec /usr/local/apache2/bin/httpd -DFOREGROUND;
-      '
 
   phpmyadmin:
     image: phpmyadmin:latest

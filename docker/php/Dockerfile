@@ -35,3 +35,9 @@ RUN { \
       echo "opcache.validate_timestamps=1"; \
       echo "opcache.revalidate_freq=0"; \
     } > /usr/local/etc/php/conf.d/opcache-dev.ini
+
+COPY entrypoint.sh /usr/local/bin/ucc-php-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/ucc-php-entrypoint.sh \
+  && chmod +x /usr/local/bin/ucc-php-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/ucc-php-entrypoint.sh"]
