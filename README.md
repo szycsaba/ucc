@@ -7,13 +7,15 @@ Secure event manager with REST API and separate frontend, featuring login + pass
 - Docker Desktop (Windows)
 
 ### First run
-1) Start containers:
+1) Rename `.env.example` to `.env`.
+
+2) Start containers:
 
 ```bash
 docker compose up -d
 ```
 
-2) Trust the local dev CA certificate (removes "Not secure" warning in Chrome/Edge for `https://localhost:*`).
+3) Trust the local dev CA certificate (removes "Not secure" warning in Chrome/Edge for `https://localhost:*`).
 This step will prompt for Administrator privileges (Windows certificate store).
 
 ```powershell
