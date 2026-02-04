@@ -1,0 +1,176 @@
+services:
+  db:
+    image: mysql:latest
+    container_name: ucc-mysql
+    restart: unless-stopped
+    ports:
+      - "3366:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ:-Europe/Budapest}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - ucc
+
+  php:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: ucc-php
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_DEBUG: ${APP_DEBUG:-true}
+      APP_URL: ${APP_URL:-https://localhost}
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE}
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./api:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+      - apache_ssl:/ssl
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ucc
+    command: >
+      sh -lc '
+        set -eu;
+        if [ ! -f /ssl/server.key ] || [ ! -f /ssl/server.crt ]; then
+          echo "[php] Generating self-signed TLS cert for Apache (dev only)...";
+          mkdir -p /ssl;
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            -keyout /ssl/server.key -out /ssl/server.crt;
+        fi;
+
+        if [ ! -f /var/www/html/artisan ]; then
+          echo "[php] ./api looks empty -> creating Laravel 12 project...";
+          rm -rf /tmp/laravel-init;
+          mkdir -p /tmp/laravel-init;
+          composer create-project --no-interaction laravel/laravel:^12.0 /tmp/laravel-init;
+          cp -a /tmp/laravel-init/. /var/www/html/;
+        fi;
+
+        if [ -f /var/www/html/composer.json ]; then
+          if [ ! -d /var/www/html/vendor ] || [ -z "$(ls -A /var/www/html/vendor 2>/dev/null || true)" ]; then
+            echo "[php] Installing backend dependencies (composer install)...";
+            composer install --no-interaction --prefer-dist;
+          fi;
+
+          if [ -f /var/www/html/.env ] && grep -q "^APP_KEY=$" /var/www/html/.env; then
+            echo "[php] Generating Laravel APP_KEY (php artisan key:generate)...";
+            php /var/www/html/artisan key:generate --no-interaction;
+          fi;
+        else
+          echo "[php] WARNING: ./api/composer.json not found. Create your Laravel project in ./api first.";
+        fi;
+
+        exec php-fpm -F;
+      '
+
+  apache:
+    image: httpd:2.4
+    container_name: ucc-apache
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - php
+    volumes:
+      - ./api:/var/www/html:ro
+      - ./docker/apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
+      - apache_ssl:/usr/local/apache2/conf/ssl
+    networks:
+      - ucc
+    command: >
+      sh -lc '
+        set -eu;
+        mkdir -p /usr/local/apache2/conf/ssl;
+        echo "[apache] Waiting for TLS cert files...";
+        while [ ! -f /usr/local/apache2/conf/ssl/server.key ] || [ ! -f /usr/local/apache2/conf/ssl/server.crt ]; do
+          sleep 1;
+        done;
+        echo "[apache] Waiting for Laravel public/index.php...";
+        while [ ! -f /var/www/html/public/index.php ]; do
+          sleep 1;
+        done;
+        exec httpd-foreground;
+      '
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: ucc-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 128M
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ucc
+
+  frontend:
+    image: node:latest
+    container_name: ucc-frontend
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    networks:
+      - ucc
+    command: >
+      sh -lc '
+        set -eu;
+        if [ ! -f /app/package.json ]; then
+          echo "[frontend] ./frontend looks empty -> creating Vite + React project...";
+          rm -rf /tmp/vite-init;
+          npm create vite@latest /tmp/vite-init -- --template react;
+          cp -a /tmp/vite-init/. /app/;
+        fi;
+        if [ ! -d /app/node_modules ] || [ -z "$(ls -A /app/node_modules 2>/dev/null || true)" ]; then
+          echo "[frontend] Installing frontend dependencies (npm install)...";
+          npm install;
+        fi;
+        exec npm run dev -- --host 0.0.0.0 --port 5173;
+      '
+
+volumes:
+  mysql_data:
+    name: ucc_mysql_data
+  backend_vendor:
+    name: ucc_backend_vendor
+  frontend_node_modules:
+    name: ucc_frontend_node_modules
+  apache_ssl:
+    name: ucc_apache_ssl
+
+networks:
+  ucc:
+    name: ucc
