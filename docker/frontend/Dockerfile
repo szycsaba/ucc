@@ -4,6 +4,7 @@ RUN apt-get update -o Acquire::Retries=3 \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
+    openssl \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
