@@ -14,9 +14,7 @@ if [ ! -f /ssl/ca.key ] || [ ! -f /ssl/ca.crt ]; then
   cp /ssl/ca.crt /ssl/ucc-dev-ca.crt 2>/dev/null || true
 fi
 
-# --- Server cert signed by dev CA (for localhost) ---
-if [ ! -f /ssl/server.key ] || [ ! -f /ssl/server.crt ]; then
-  echo "[php] Generating TLS cert for localhost signed by dev CA..."
+ensure_server_cert() {
   cat > /ssl/server.ext <<'EOF'
 basicConstraints=CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
@@ -31,6 +29,19 @@ EOF
     -CA /ssl/ca.crt -CAkey /ssl/ca.key -CAcreateserial \
     -out /ssl/server.crt -extfile /ssl/server.ext
   rm -f /ssl/server.csr /ssl/server.ext 2>/dev/null || true
+}
+
+# --- Server cert signed by dev CA (for localhost) ---
+if [ ! -f /ssl/server.key ] || [ ! -f /ssl/server.crt ]; then
+  echo "[php] Generating TLS cert for localhost signed by dev CA..."
+  ensure_server_cert
+else
+  # If an old self-signed cert exists in the volume, replace it with CA-signed one.
+  if ! openssl verify -CAfile /ssl/ca.crt /ssl/server.crt >/dev/null 2>&1; then
+    echo "[php] Existing server.crt is not signed by dev CA -> regenerating..."
+    rm -f /ssl/server.crt /ssl/server.key /ssl/ca.srl 2>/dev/null || true
+    ensure_server_cert
+  fi
 fi
 
 # --- Laravel bootstrap (only if project exists / generated) ---
