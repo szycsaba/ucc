@@ -48,7 +48,7 @@ services:
     networks:
       - ucc
     command: >
-      sh -lc '
+      sh -c '
         set -eu;
         if [ ! -f /ssl/server.key ] || [ ! -f /ssl/server.crt ]; then
           echo "[php] Generating self-signed TLS cert for Apache (dev only)...";
@@ -89,8 +89,8 @@ services:
     container_name: ucc-apache
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "8000:80"
+      - "8443:443"
     depends_on:
       - php
     volumes:
@@ -100,7 +100,7 @@ services:
     networks:
       - ucc
     command: >
-      sh -lc '
+      sh -c '
         set -eu;
         mkdir -p /usr/local/apache2/conf/ssl;
         echo "[apache] Waiting for TLS cert files...";
@@ -111,7 +111,8 @@ services:
         while [ ! -f /var/www/html/public/index.php ]; do
           sleep 1;
         done;
-        exec httpd-foreground;
+        export PATH="/usr/local/apache2/bin:${PATH}";
+        exec /usr/local/apache2/bin/httpd -DFOREGROUND;
       '
 
   phpmyadmin:
@@ -146,13 +147,11 @@ services:
     networks:
       - ucc
     command: >
-      sh -lc '
+      sh -c '
         set -eu;
         if [ ! -f /app/package.json ]; then
           echo "[frontend] ./frontend looks empty -> creating Vite + React project...";
-          rm -rf /tmp/vite-init;
-          npm create vite@latest /tmp/vite-init -- --template react;
-          cp -a /tmp/vite-init/. /app/;
+          npm create vite@latest . -- --template react;
         fi;
         if [ ! -d /app/node_modules ] || [ -z "$(ls -A /app/node_modules 2>/dev/null || true)" ]; then
           echo "[frontend] Installing frontend dependencies (npm install)...";
