@@ -82,6 +82,16 @@ services:
     networks:
       - ucc
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ucc-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP
+    networks:
+      - ucc
+
   frontend:
     build:
       context: ./docker/frontend

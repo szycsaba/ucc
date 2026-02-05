@@ -26,3 +26,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\trust-dev-ca.ps1"
 - Backend (Laravel API): `https://localhost:8443`
 - Frontend (Vite dev): `https://localhost:5173`
 - phpMyAdmin: `http://localhost:8080`
+- Mailpit (email inbox): `http://localhost:8025`
