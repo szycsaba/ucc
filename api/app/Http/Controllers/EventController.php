@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreEventRequest;
 use App\Models\Event;
+use App\Services\EventService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EventController extends Controller
@@ -18,9 +21,11 @@ class EventController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(StoreEventRequest $request, EventService $eventService): JsonResponse
     {
-        //
+        $response = $eventService->createEvent($request->validated());
+
+        return response()->json($response->toArray(), $response->status);
     }
 
     /**
